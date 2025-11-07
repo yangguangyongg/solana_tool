@@ -1,0 +1,29 @@
+{
+  "name": "solana_tool",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yangguangyongg/solana_tool.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yangguangyongg/solana_tool/issues"
+  },
+  "homepage": "https://github.com/yangguangyongg/solana_tool#readme",
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "dotenv": "^17.2.3"
+  },
+
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}
