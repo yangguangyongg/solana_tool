@@ -1,72 +1,76 @@
-import { batchAirdrop } from './services/airdrop.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getConnection } from './utils/connection.js';
+import {
+    RUN_CREATE,
+    RUN_AIRDROP,
+    RUN_BUY,
+    RUN_SWEEP,
+    WALLET_DIR,
+    WALLET_COUNT,
+    AIRDROP_SOL_PER_WALLET,
+    AIRDROP_TOKEN_MINT,
+    AIRDROP_TOKEN_AMOUNT,
+    BUY_TOKEN_MINT,
+    BUY_SOL_AMOUNT,
+    SWEEP_TOKEN_MINTS,
+} from './config.js';
+import { createWalletFiles } from './services/createWallets.js';
 import { loadWalletsFromDir } from './utils/loadWalletDir.js';
-import { swapSolToTargetOnRaydium } from './services/raydiumBuy.js';
-import {Connection} from "@solana/web3.js";
-import { RPC_ENDPOINT } from './config.js';
-import { sweepSol, sweepPmug } from './services/sweep.js';
-import {sleep} from "./utils/sleep.js";
+import { airdropToWallets } from './services/airdrop.js';
+import { raydiumSwapSolToToken } from './services/raydiumBuy.js';
+import { sweepWallet } from './services/sweep.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WALLET_DIR = path.join(__dirname, 'wallet');
 
 async function main() {
-    // Step 1: airdrop
-    const recipients = [
-
-    ];
-    // await batchAirdrop(recipients);
-
-    // Step 2: swap
-    const wallets = loadWalletsFromDir(WALLET_DIR);
-    if (wallets.length === 0) {
-        console.log('No wallet json files found in', WALLET_DIR);
-        return;
+    // step 1: create wallets
+    if (RUN_CREATE) {
+        console.log('=== step 1: create wallets ===');
+        createWalletFiles(WALLET_DIR, WALLET_COUNT);
     }
 
-    console.log(`Found ${wallets.length} wallets in ${WALLET_DIR}`);
+    // load wallets (whether newly created or existing)
+    const wallets = loadWalletsFromDir(WALLET_DIR);
+    console.log(`loaded ${wallets.length} wallets from ${WALLET_DIR}`);
 
-    for (const { name, keypair } of wallets) {
-        try {
-            await swapSolToTargetOnRaydium(keypair, 0.01);
-            console.log(`All done for ${name}`);
-            await sleep(2000);
-        } catch (err) {
-            console.error(`Failed for ${name}:`, err.message);
+    // step 2: airdrop
+    if (RUN_AIRDROP) {
+        console.log('=== step 2: airdrop ===');
+        await airdropToWallets(wallets, {
+            solAmount: AIRDROP_SOL_PER_WALLET,
+            tokenMint: AIRDROP_TOKEN_MINT,
+            tokenAmount: AIRDROP_TOKEN_AMOUNT,
+        });
+    }
+
+    // step 3: buy token (raydium)
+    if (RUN_BUY && BUY_TOKEN_MINT && BUY_SOL_AMOUNT > 0) {
+        console.log('=== step 3: buy token ===');
+        for (const { name, keypair } of wallets) {
+            try {
+                await raydiumSwapSolToToken(keypair, BUY_TOKEN_MINT, BUY_SOL_AMOUNT);
+            } catch (e) {
+                console.error(`buy failed for ${name}:`, e.message);
+            }
         }
     }
 
-    // Step 3: Sweep
-    // const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-    //
-    // const wallets = loadWalletsFromDir(WALLET_DIR);
-    // if (wallets.length === 0) {
-    //     console.log('No wallets found in', WALLET_DIR);
-    //     return;
-    // }
-    //
-    // console.log(`Found ${wallets.length} wallets`);
-    //
-    // for (const { name, keypair } of wallets) {
-    //     console.log(`\n=== sweeping ${name} (${keypair.publicKey.toBase58()}) ===`);
-    //     try {
-    //         await sweepPmug(connection, keypair);
-    //     } catch (e) {
-    //         console.error(`PMUG sweep failed for ${name}:`, e.message);
-    //     }
-    //
-    //     try {
-    //         await sweepSol(connection, keypair);
-    //     } catch (e) {
-    //         console.error(`SOL sweep failed for ${name}:`, e.message);
-    //     }
-    // }
-    //
-    // console.log('\nAll done.');
+    // step 4: sweep
+    if (RUN_SWEEP) {
+        console.log('=== step 4: sweep ===');
+        const connection = getConnection();
+        for (const { name, keypair } of wallets) {
+            try {
+                await sweepWallet(connection, keypair, SWEEP_TOKEN_MINTS);
+            } catch (e) {
+                console.error(`sweep failed for ${name}:`, e.message);
+            }
+        }
+    }
 
-
+    console.log('workflow finished.');
 }
 
 main().catch(console.error);

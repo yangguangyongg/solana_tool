@@ -141,5 +141,6 @@ vite.config.ts.timestamp-*
 # secrets
 payer.json
 src/wallet/*.json
+src/wallet/**/*.json
 
 .idea

@@ -1,34 +1,89 @@
-import { PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
-import { AIRDROP_AMOUNT } from '../config.js';
+import fs from 'fs';
+import {
+    SystemProgram,
+    Transaction,
+    sendAndConfirmTransaction,
+    PublicKey,
+    Keypair,
+} from '@solana/web3.js';
+import {
+    getAssociatedTokenAddress,
+    getMint,
+    createTransferInstruction,
+} from '@solana/spl-token';
 import { getConnection } from '../utils/connection.js';
-import { loadPayer } from '../utils/payer.js';
-import { sleep } from '../utils/sleep.js';
+import {
+    PAYER_JSON,
+    AIRDROP_SOL_PER_WALLET,
+    AIRDROP_TOKEN_MINTS,
+    AIRDROP_TOKEN_AMOUNTS,
+} from '../config.js';
 
-export async function batchAirdrop(recipients, amountSol = AIRDROP_AMOUNT) {
+function loadPayer() {
+    const raw = fs.readFileSync(PAYER_JSON, 'utf8');
+    const secret = JSON.parse(raw);
+    return Keypair.fromSecretKey(Uint8Array.from(secret));
+}
+
+/**
+ * Airdrop to wallets:
+ * - optional SOL
+ * - multiple SPL tokens from .env, comma separated
+ *
+ * @param {Array<{name: string, keypair: import('@solana/web3.js').Keypair}>} wallets
+ */
+export async function airdropToWallets(wallets) {
     const connection = getConnection();
     const payer = loadPayer();
-    const lamports = Math.round(amountSol * 1_000_000_000);
 
-    console.log('Payer:', payer.publicKey.toBase58());
-    console.log('Recipients:', recipients.length);
-
-    for (let i = 0; i < recipients.length; i++) {
-        const to = new PublicKey(recipients[i]);
-        const tx = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: payer.publicKey,
-                toPubkey: to,
-                lamports,
-            })
+    // sanity check: mints and amounts must match
+    if (AIRDROP_TOKEN_MINTS.length !== AIRDROP_TOKEN_AMOUNTS.length) {
+        throw new Error(
+            `AIRDROP_TOKEN_MINTS length (${AIRDROP_TOKEN_MINTS.length}) != AIRDROP_TOKEN_AMOUNTS length (${AIRDROP_TOKEN_AMOUNTS.length})`
         );
+    }
 
-        try {
+    for (const { name, keypair } of wallets) {
+        const toPubkey = keypair.publicKey;
+        console.log(`\n--- airdrop to ${name} (${toPubkey.toBase58()}) ---`);
+
+        // 1) optional SOL
+        if (AIRDROP_SOL_PER_WALLET > 0) {
+            const lamports = Math.round(AIRDROP_SOL_PER_WALLET * 1_000_000_000);
+            const tx = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: payer.publicKey,
+                    toPubkey,
+                    lamports,
+                })
+            );
             const sig = await sendAndConfirmTransaction(connection, tx, [payer]);
-            console.log(`[${i + 1}/${recipients.length}] OK -> ${to.toBase58()} | ${sig}`);
-        } catch (err) {
-            console.error(`[${i + 1}/${recipients.length}] FAIL -> ${to.toBase58()} | ${err.message}`);
+            console.log(`sent SOL ${AIRDROP_SOL_PER_WALLET} -> ${toPubkey.toBase58()} | ${sig}`);
         }
 
-        await sleep(400);
+        // 2) multiple SPL tokens
+        for (let i = 0; i < AIRDROP_TOKEN_MINTS.length; i++) {
+            const mintStr = AIRDROP_TOKEN_MINTS[i];
+            const humanAmount = AIRDROP_TOKEN_AMOUNTS[i];
+
+            const mintPk = new PublicKey(mintStr);
+            const mintInfo = await getMint(connection, mintPk);
+            const decimals = mintInfo.decimals;
+
+            // convert human -> raw
+            const amountRaw = BigInt(Math.round(humanAmount * 10 ** decimals));
+
+            const srcAta = await getAssociatedTokenAddress(mintPk, payer.publicKey);
+            const destAta = await getAssociatedTokenAddress(mintPk, toPubkey);
+
+            const tx = new Transaction().add(
+                createTransferInstruction(srcAta, destAta, payer.publicKey, amountRaw)
+            );
+
+            const sig = await sendAndConfirmTransaction(connection, tx, [payer]);
+            console.log(
+                `sent ${humanAmount} of ${mintStr} -> ${toPubkey.toBase58()} | ${sig}`
+            );
+        }
     }
 }

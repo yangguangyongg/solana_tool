@@ -3,57 +3,42 @@ import {
     VersionedTransaction,
     PublicKey,
 } from '@solana/web3.js';
-import fetch from 'node-fetch'; // remove this line if you're on Node 18+ and have global fetch
+import fetch from 'node-fetch';
 import { RPC_ENDPOINT } from '../config.js';
 
-/**
- * Raydium public endpoints
- * DOC: https://docs.raydium.io/raydium/traders/trade-api
- */
 const RAYDIUM_SWAP_HOST = 'https://transaction-v1.raydium.io';
 const RAYDIUM_BASE_HOST = 'https://api-v3.raydium.io';
-
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
-
-const TARGET_MINT = 'V8tLkyqHdtzzYCGdsVf5CZ55BsLuvu7F4TchiDhJgem';
 
 async function fetchPriorityFee() {
     try {
         const res = await fetch(`${RAYDIUM_BASE_HOST}/fees/priority`);
         const json = await res.json();
-        // json.data.default.h is "high" priority in their doc
         return String(json.data.default.h);
-    } catch (e) {
-        // fall back to 10000 microLamports
+    } catch {
         return '10000';
     }
 }
 
-/**
- * Swap SOL -> target token for one wallet
- * @param {import('@solana/web3.js').Keypair} wallet
- * @param {number} amountSol amount of SOL to swap
- */
-export async function swapSolToTargetOnRaydium(wallet, amountSol) {
+export async function raydiumSwapSolToToken(wallet, tokenMint, amountSol) {
     const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-
     const amountLamports = Math.round(amountSol * 1_000_000_000);
 
-    const quoteUrl = `${RAYDIUM_SWAP_HOST}/compute/swap-base-in` +
+    const quoteUrl =
+        `${RAYDIUM_SWAP_HOST}/compute/swap-base-in` +
         `?inputMint=${SOL_MINT}` +
-        `&outputMint=${TARGET_MINT}` +
+        `&outputMint=${tokenMint}` +
         `&amount=${amountLamports}` +
-        `&slippageBps=100` + // 1% slippage, adjust if pool is thin
+        `&slippageBps=100` +
         `&txVersion=V0`;
 
     const quoteRes = await fetch(quoteUrl);
     const quoteJson = await quoteRes.json();
-
     if (!quoteJson?.data) {
-        throw new Error(`Raydium quote failed: ${JSON.stringify(quoteJson)}`);
+        throw new Error(`raydium quote failed for ${wallet.publicKey.toBase58()}`);
     }
 
-    const priorityFee = await fetchPriorityFee();
+    const priority = await fetchPriorityFee();
 
     const swapRes = await fetch(`${RAYDIUM_SWAP_HOST}/transaction/swap-base-in`, {
         method: 'POST',
@@ -62,28 +47,23 @@ export async function swapSolToTargetOnRaydium(wallet, amountSol) {
             swapResponse: quoteJson,
             txVersion: 'V0',
             wallet: wallet.publicKey.toBase58(),
-            wrapSol: true,     // because we are swapping from SOL
-            unwrapSol: false,  // we are receiving an SPL token
-            computeUnitPriceMicroLamports: priorityFee,
-            // inputAccount: undefined because input is SOL
-            // outputAccount: we can let Raydium create ATA automatically
+            wrapSol: true,
+            unwrapSol: false,
+            computeUnitPriceMicroLamports: priority,
         }),
     });
-
     const swapJson = await swapRes.json();
-
     if (!swapJson?.success) {
-        throw new Error(`Raydium swap build failed: ${JSON.stringify(swapJson)}`);
+        throw new Error(`raydium build failed: ${JSON.stringify(swapJson)}`);
     }
 
     const txBase64 = swapJson.data?.[0]?.transaction;
     if (!txBase64) {
-        throw new Error('No transaction returned from Raydium');
+        throw new Error('raydium transaction missing');
     }
 
     const txBuffer = Buffer.from(txBase64, 'base64');
     const tx = VersionedTransaction.deserialize(txBuffer);
-
     tx.sign([wallet]);
 
     const sig = await connection.sendTransaction(tx, {
@@ -93,15 +73,11 @@ export async function swapSolToTargetOnRaydium(wallet, amountSol) {
 
     const latest = await connection.getLatestBlockhash();
     await connection.confirmTransaction(
-        {
-            signature: sig,
-            blockhash: latest.blockhash,
-            lastValidBlockHeight: latest.lastValidBlockHeight,
-        },
+        { signature: sig, ...latest },
         'confirmed'
     );
 
     console.log(
-        `swapped ${amountSol} SOL for ${TARGET_MINT} from ${wallet.publicKey.toBase58()} | tx: ${sig}`
+        `raydium swap done for ${wallet.publicKey.toBase58()} | ${amountSol} SOL -> ${tokenMint} | ${sig}`
     );
 }
