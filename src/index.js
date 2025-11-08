@@ -8,9 +8,6 @@ import {
     RUN_SWEEP,
     WALLET_DIR,
     WALLET_COUNT,
-    AIRDROP_SOL_PER_WALLET,
-    AIRDROP_TOKEN_MINT,
-    AIRDROP_TOKEN_AMOUNT,
     BUY_TOKEN_MINT,
     BUY_SOL_AMOUNT,
     SWEEP_TOKEN_MINTS,
@@ -38,11 +35,7 @@ async function main() {
     // step 2: airdrop
     if (RUN_AIRDROP) {
         console.log('=== step 2: airdrop ===');
-        await airdropToWallets(wallets, {
-            solAmount: AIRDROP_SOL_PER_WALLET,
-            tokenMint: AIRDROP_TOKEN_MINT,
-            tokenAmount: AIRDROP_TOKEN_AMOUNT,
-        });
+        await airdropToWallets(wallets);
     }
 
     // step 3: buy token (raydium)
