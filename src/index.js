@@ -9,7 +9,8 @@ import {
     WALLET_DIR,
     WALLET_COUNT,
     BUY_TOKEN_MINT,
-    BUY_SOL_AMOUNT,
+    BUY_MIN_SOL,
+    BUY_MAX_SOL,
     SWEEP_TOKEN_MINTS,
     BUY_DELAY_MS
 } from './config.js';
@@ -21,6 +22,11 @@ import { sweepWallet } from './services/sweep.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function randomInRange(min, max) {
+    // inclusive of min, exclusive of max
+    return Math.random() * (max - min) + min;
+}
 
 async function main() {
     // step 1: create wallets
@@ -40,11 +46,15 @@ async function main() {
     }
 
     // step 3: buy token (raydium)
-    if (RUN_BUY && BUY_TOKEN_MINT && BUY_SOL_AMOUNT > 0) {
+    if (RUN_BUY &&
+        BUY_TOKEN_MINT &&
+        BUY_MAX_SOL > 0 &&
+        BUY_MAX_SOL >= BUY_MIN_SOL) {
         console.log('=== step 3: buy token ===');
         for (const { name, keypair } of wallets) {
+            const amountSol = Number(randomInRange(BUY_MIN_SOL, BUY_MAX_SOL).toFixed(6));
             try {
-                await raydiumSwapSolToToken(keypair, BUY_TOKEN_MINT, BUY_SOL_AMOUNT);
+                await raydiumSwapSolToToken(keypair, BUY_TOKEN_MINT, amountSol);
             } catch (e) {
                 console.error(`buy failed for ${name}:`, e.message);
             }

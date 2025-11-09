@@ -25,7 +25,8 @@ export const AIRDROP_TOKEN_AMOUNTS = (process.env.AIRDROP_TOKEN_AMOUNTS || '')
     .map((s) => Number(s));
 
 export const BUY_TOKEN_MINT = process.env.BUY_TOKEN_MINT || '';
-export const BUY_SOL_AMOUNT = Number(process.env.BUY_SOL_AMOUNT || '0');
+export const BUY_MIN_SOL = Number(process.env.BUY_MIN_SOL || '0');
+export const BUY_MAX_SOL = Number(process.env.BUY_MAX_SOL || '0');
 export const BUY_DELAY_MS = Number(process.env.BUY_DELAY_MS || '0');
 
 export const COLLECTOR = process.env.COLLECTOR || '';
