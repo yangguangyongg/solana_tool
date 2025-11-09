@@ -11,6 +11,7 @@ import {
     BUY_TOKEN_MINT,
     BUY_SOL_AMOUNT,
     SWEEP_TOKEN_MINTS,
+    BUY_DELAY_MS
 } from './config.js';
 import { createWalletFiles } from './services/createWallets.js';
 import { loadWalletsFromDir } from './utils/loadWalletDir.js';
@@ -46,6 +47,11 @@ async function main() {
                 await raydiumSwapSolToToken(keypair, BUY_TOKEN_MINT, BUY_SOL_AMOUNT);
             } catch (e) {
                 console.error(`buy failed for ${name}:`, e.message);
+            }
+
+            if (BUY_DELAY_MS > 0) {
+                console.log(`waiting ${BUY_DELAY_MS} ms before next wallet.`);
+                await new Promise((r) => setTimeout(r, BUY_DELAY_MS));
             }
         }
     }

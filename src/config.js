@@ -26,6 +26,7 @@ export const AIRDROP_TOKEN_AMOUNTS = (process.env.AIRDROP_TOKEN_AMOUNTS || '')
 
 export const BUY_TOKEN_MINT = process.env.BUY_TOKEN_MINT || '';
 export const BUY_SOL_AMOUNT = Number(process.env.BUY_SOL_AMOUNT || '0');
+export const BUY_DELAY_MS = Number(process.env.BUY_DELAY_MS || '0');
 
 export const COLLECTOR = process.env.COLLECTOR || '';
 export const SWEEP_TOKEN_MINTS = (process.env.SWEEP_TOKEN_MINTS || '')
